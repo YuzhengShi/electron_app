@@ -1,4 +1,52 @@
-const { app, BrowserWindow, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
+const path = require('path');
+
+let mainWindow;
+
+function createWindow() {
+    mainWindow = new BrowserWindow({
+        webPreferences: {
+            preload: path.join(__dirname, 'preload.js'),
+            nodeIntegration: true,
+            contextIsolation: false
+        }
+    });
+
+    mainWindow.loadFile('index.html');
+
+    // Inject the content script
+    mainWindow.webContents.executeJavaScript(`
+        const script = document.createElement('script');
+        script.src = 'captureText.js';
+        document.head.appendChild(script);
+    `);
+}
+
+app.whenReady().then(createWindow);
+
+ipcMain.on('selected-text', (event, text) => {
+    console.log('Selected text:', text);
+    // Process the selected text as needed
+    // For example, send it to a function for further processing
+    processSelectedText(text);
+});
+
+function processSelectedText(text) {
+    // Implement your text processing logic here
+    console.log('Processing text:', text);
+}
+
+app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+        app.quit();
+    }
+});
+
+app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow();
+    }
+});const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const { spawn, exec } = require('child_process');
 const path = require('path');
 
