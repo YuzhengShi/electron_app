@@ -1,5 +1,10 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('electronAPI', {
-    sendSelectedText: (text) => ipcRenderer.send('selected-text', text)
+contextBridge.exposeInMainWorld('electron', {
+  receive: (channel, func) => {
+    ipcRenderer.on(channel, (event, ...args) => func(...args));
+  },
+  invoke: (channel, ...args) => {
+    return ipcRenderer.invoke(channel, ...args);
+  }
 });

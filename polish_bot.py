@@ -2,156 +2,57 @@ import streamlit as st
 from openai import OpenAI
 import os
 import pyperclip
-from llama_index.core import Settings
-from rag_processor import process_video
-from llama_index.embeddings.openai import OpenAIEmbedding
+import streamlit.components.v1 as components
 
 # Initialize OpenAI client
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-Settings.embed_model = OpenAIEmbedding(model="text-embedding-3-large")
+# Initialize session state variables
+if "responses" not in st.session_state:
+    st.session_state.responses = []
+if "analysis" not in st.session_state:
+    st.session_state.analysis = None
 
-# Initialize each session state variable individually
-if "video_processed" not in st.session_state:
-    st.session_state.video_processed = False
-if "transcript" not in st.session_state:
-    st.session_state.transcript = None
-if "index" not in st.session_state:
-    st.session_state.index = None
-if "retriever" not in st.session_state:
-    st.session_state.retriever = None
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
-if "question_input" not in st.session_state:
-    st.session_state.question_input = ""
-
-# Function to update input when suggestion is clicked
-def use_suggestion(suggestion_text):
-    st.session_state.question_input = suggestion_text
-
-def generate_video_summary(transcript: str) -> str:
-    """Generate a concise summary of the video transcript"""
-    try:
-        # Truncate transcript if too long
-        truncated_transcript = transcript[:8000] if len(transcript) > 8000 else transcript
-        
-        prompt = f"""
-        Summarize this video transcript concisely:
-
-        TRANSCRIPT:
-        {truncated_transcript}
-
-        INSTRUCTIONS:
-        1. Create a brief summary (100-150 words)
-        2. Focus on main topics and key points
-        3. Use clear, straightforward language
-        4. Structure as: brief overview followed by 3-5 main points
-
-        SUMMARY:
-        """
-        
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You create concise, informative summaries of educational videos."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.3,
-            max_tokens=250
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        return f"Error generating summary: {str(e)}"
-    
-def generate_answer(context: str, question: str) -> str:
-    """Generate LLM-based answer from retrieved context"""
-    try:
-        prompt = f"""
-        You are a student helper answering questions about a transcript of a educational video.
-        
-        CONTEXT INFORMATION:
-        {context}
-        
-        QUESTION:
-        {question}
-        
-        INSTRUCTIONS:
-        1. Use the provided context information as your primary source
-        2. If the exact answer isn't in the context, say "While not explicitly covered in the video..." and provide your best answer using your general knowledge
-        3. ALWAYS provide an answer, even when the context has limited information
-        4. Use specific quotes or examples from the context when available
-        5. Keep your answer concise and direct - focus on addressing the question
-        6. Organize complex information into short paragraphs for readability
-        7. If the context contains relevant numbers, dates, or specific facts, include them in your answer
-        8. Use bullet points for multi-part answers
-        
-        Your response:
-        """
-        
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You are a helpful educational assistant who always provides answers based on available context or general knowledge when needed."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=300
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        return f"Error generating answer: {str(e)}"
-
-def generate_suggestions(context: str, history: list) -> list:
-    """Generate concise follow-up questions using LLM"""
-    try:
-        prompt = f"""
-        You are generating concise follow-up questions for an educational video Q&A system.
-        
-        CONTEXT INFORMATION:
-        {context}
-        
-        RECENT CONVERSATION HISTORY:
-        {history[-3:] if history else "No previous conversation"}
-        
-        INSTRUCTIONS:
-        1. Generate exactly 3 follow-up questions based on the context
-        2. Make questions CONCISE
-        3. Each question on its own line with no numbering
-        4. Questions should be simple but insightful
-        5. Use conversational language a student would use
-        6. Focus on key concepts from the context
-        7. Avoid questions that appear in conversation history
-        
-        EXAMPLES OF GOOD CONCISE QUESTIONS:
-        How does X impact Y specifically?
-        Why is concept Z important?
-        What's the difference between A and B?
-        
-        THREE CONCISE FOLLOW-UP QUESTIONS:
-        """
-        
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You create extremely concise but insightful educational questions."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,  # Slightly higher temperature for creative but concise phrasing
-            max_tokens=100    # Reduced token limit to encourage brevity
-        )
-        
-        # Process and clean up questions
-        questions = []
-        for q in response.choices[0].message.content.split("\n"):
-            q = q.strip()
-            if q and not q.isspace():
-                # Remove any numbering or bullet points
-                q = q.lstrip("123.-• ")
-                questions.append(q)
+# Function to add clipboard handler JavaScript
+def add_clipboard_handler():
+    """Add JavaScript to handle clipboard events from Electron"""
+    js_code = """
+    <script>
+    // Listen for paste-from-clipboard events from Electron
+    if (window.electron) {
+        window.electron.receive('paste-from-clipboard', async () => {
+            try {
+                // Request clipboard text from the main process
+                const clipboardText = await window.electron.invoke('read-clipboard');
                 
-        return questions
-    except Exception as e:
-        return []
-    
+                // Find the text areas and update them
+                const textareas = document.querySelectorAll('textarea');
+                if (textareas.length > 0) {
+                    // Focus on the first textarea (it should be our input box)
+                    textareas[0].focus();
+                    
+                    // Update the textarea value
+                    textareas[0].value = clipboardText;
+                    
+                    // Trigger an input event to notify Streamlit
+                    const event = new Event('input', { bubbles: true });
+                    textareas[0].dispatchEvent(event);
+                    
+                    // Also trigger a change event
+                    const changeEvent = new Event('change', { bubbles: true });
+                    textareas[0].dispatchEvent(changeEvent);
+                }
+            } catch (error) {
+                console.error('Error processing clipboard:', error);
+            }
+        });
+    } else {
+        console.log('Electron bridge not available');
+    }
+    </script>
+    """
+    components.html(js_code, height=0)
+
 def generate_polite_response(user_input, content_type, recipient_type, num_responses=1):
     """Generate responses based on recipient type and content type"""
     format_rules = {
@@ -259,7 +160,7 @@ def generate_polite_response(user_input, content_type, recipient_type, num_respo
         st.error(f"Error: {str(e)}")
         return []
     
-# message analysis
+# Message analysis
 def analyze_message(message):
     """Analyze received messages using LLM"""
     analysis_prompt = f"""
@@ -340,10 +241,14 @@ def parse_analysis(raw_text):
     return sections
 
 # Streamlit UI
-tab1, tab2, tab3 = st.tabs(["Polisher", "Analyzer", "RAG"])
+st.title("💬 Communication Assistant")
+tab1, tab2 = st.tabs(["✍️ Polisher", "🔍 Analyzer"])
 
 with tab1:
-    st.title("📩 Commnucation Assistant")
+    # Add the clipboard handler to the page
+    add_clipboard_handler()
+    
+    st.header("📩 Message Polisher")
 
     # Input Section
     user_input = st.text_area("✏️ Polish Your message:", height=100)
@@ -362,7 +267,7 @@ with tab1:
             st.session_state["responses"] = responses
 
     # Display Results
-    if "responses" in st.session_state:
+    if "responses" in st.session_state and st.session_state["responses"]:
         st.markdown("---")
         
         for i, (subject, body) in enumerate(st.session_state["responses"], 1):
@@ -379,8 +284,8 @@ with tab1:
 
         # Download functionality
         all_responses = "\n\n".join([
-            f"Version {i}:\n{resp}" 
-            for i, resp in enumerate(st.session_state["responses"], 1)
+            f"Version {i}:\n{subject}\n{body}" 
+            for i, (subject, body) in enumerate(st.session_state["responses"], 1)
         ])
         
         st.download_button(
@@ -392,14 +297,14 @@ with tab1:
         )
 
 with tab2:
-    st.title("🤖 Analyze Messages")
+    # Add the clipboard handler to the page
+    add_clipboard_handler()
+    
+    st.header("🤖 Message Analyzer")
 
-    if "analysis" not in st.session_state:
-        st.session_state.analysis = None
+    received_message = st.text_area("🏅 Paste a message to analyze:", height=150)
 
-    received_message = st.text_area("🏅 Paste a message:", height=150)
-
-    if st.button("🔮 Analyze Message"):
+    if st.button("🔮 Analyze Message", use_container_width=True):
         if len(received_message) < 10:
             st.warning("Please enter a longer message to analyze")
         else:
@@ -434,101 +339,6 @@ with tab2:
 
             finalized_response = st.text_area("Suggestion response:", value=response_text, height=150)
             
-            if st.button("Copy Response"):
+            if st.button("Copy Response", use_container_width=True):
                 pyperclip.copy(finalized_response)
                 st.success("Response copied to clipboard!")
-
-# Video chat
-with tab3:
-    st.title("Ask your videos! 🎥💬")
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        video_url = st.text_input("🧷 Paste an URL here:", key="url_input")
-    with col2:
-        st.write("")
-        st.write("")
-        process_button = st.button("Process Video 🚀", use_container_width=True)
-
-    if process_button:
-        with st.spinner("Processing video..."):
-            try:
-                result = process_video(video_url)
-
-                summary = generate_video_summary(result["transcript"])
-                
-                # Use the simplified retrievers
-                vector_retriever = result["retrievers"]["vector"]
-                
-                st.session_state.update({
-                    "video_processed": True,
-                    "transcript": result["transcript"],
-                    "retriever": vector_retriever,  # Use vector retriever directly
-                    "index": result["index"],
-                    "video_summary": summary
-                })
-                st.success("✅ Video processed! Ask away!")
-            except Exception as e:
-                st.error(f"Error processing video: {str(e)}")
-
-    if st.session_state.video_processed:
-        st.markdown("---")
-
-        if "video_summary" in st.session_state:
-            st.subheader("📝 Video Summary")
-            st.info(st.session_state.video_summary)
-            st.markdown("---")
-
-        st.header("🔍 Ask Questions")
-        
-        # Text input with session state
-        user_input = st.text_input("Your question about the video:", 
-                                key="question_input")
-        
-        generate_button = st.button("✨ Get Answer", use_container_width=True)
-
-        # Make sure we have a place to store the current answer
-        if "current_answer" not in st.session_state:
-            st.session_state.current_answer = None
-        if "current_suggestions" not in st.session_state:
-            st.session_state.current_suggestions = []
-        
-        if generate_button and user_input:
-            with st.spinner("Finding the best answer..."):
-                nodes = st.session_state.retriever.retrieve(user_input)
-                context = "\n".join([node.text for node in nodes])
-                
-                # Generate answer
-                answer = generate_answer(context, user_input)
-                
-                # Generate suggestions
-                suggestions = generate_suggestions(context, st.session_state.chat_history)
-                
-                # Update history
-                st.session_state.chat_history.append((user_input, answer))
-
-                # Save current answer and suggestions in session state
-                st.session_state.current_answer = answer
-                st.session_state.current_suggestions = suggestions
-
-        # Display results
-        if st.session_state.current_answer:
-            st.subheader("💡 Answer")
-            st.write(st.session_state.current_answer)
-            
-            st.subheader("🤔 Suggested Questions")
-            cols = st.columns(3)
-            for i, q in enumerate(st.session_state.current_suggestions[:3]):
-                with cols[i]:
-                    # Pass the suggestion text to the callback function when clicked
-                    if st.button(q, key=f"suggestion_{i}", on_click=use_suggestion, args=(q,), use_container_width=True):
-                        pass
-
-        # Collapsible chat history
-        with st.expander("📚 View Conversation History"):
-            if st.session_state.chat_history:
-                for q, a in reversed(st.session_state.chat_history):
-                    st.markdown(f"**Q:** {q}")
-                    st.markdown(f"**A:** {a}")
-                    st.markdown("---")
-            else:
-                st.write("No conversation history yet.")

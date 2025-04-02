@@ -51,6 +51,23 @@
             font-weight: bold;
             z-index: 10;
         }
+        .clipboard-btn {
+            position: absolute;
+            bottom: -5px;
+            right: -5px;
+            width: 18px;
+            height: 18px;
+            background: #44a4ff;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 10px;
+            font-weight: bold;
+            z-index: 10;
+        }
         .icon-image {
             width: 50px; /* Match container size */
             height: 50px;
@@ -64,6 +81,7 @@
         <div class="floating-button" id="drag-handle">
             <img src="icon.png" class="icon-image">
             <div class="close-btn" id="close-btn">x</div>
+            <div class="clipboard-btn" id="clipboard-btn" title="Paste from clipboard">📋</div>
         </div>
     </div>
 
@@ -72,6 +90,7 @@
         
         const dragHandle = document.getElementById('drag-handle');
         const closeBtn = document.getElementById('close-btn');
+        const clipboardBtn = document.getElementById('clipboard-btn');
         let startX, startY;
         let isDragging = false;
         let wasDragged = false;
@@ -120,6 +139,12 @@
         closeBtn.addEventListener('click', (e) => {
             e.stopPropagation();  // Prevent toggle-popup from being triggered
             window.close();
+        });
+
+        // Clipboard button click handler
+        clipboardBtn.addEventListener('click', (e) => {
+            e.stopPropagation();  // Prevent toggle-popup from being triggered
+            ipcRenderer.send('clipboard-button-clicked');
         });
     </script>
 </body>
