@@ -9,9 +9,7 @@ from typing import List, Optional
 from llama_index.core import Document, VectorStoreIndex
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.ingestion import IngestionPipeline
-from llama_index.core.retrievers import AutoMergingRetriever
-from llama_index.retrievers.bm25 import BM25Retriever
-from llama_index.core.storage import StorageContext
+from llama_index.core.retrievers import VectorIndexRetriever
 from llama_index.embeddings.openai import OpenAIEmbedding
 
 logging.basicConfig(level=logging.INFO)
@@ -143,26 +141,17 @@ def build_rag_pipeline(transcript_text: str):
     )
     nodes = pipeline.run(documents=[doc])
     
-    # Create index with both vector and BM25 stores
+    # Create index with vector store
     index = VectorStoreIndex(nodes)
     
-    # Create retrievers
-    bm25_retriever = BM25Retriever.from_defaults(
-        nodes=nodes, 
-        similarity_top_k=2
-    )
-    
-    # Correct AutoMergingRetriever initialization
-    auto_merging_retriever = AutoMergingRetriever(
-        vector_retriever=index.as_retriever(similarity_top_k=3),
-        storage_context=index.storage_context  # No chunk_size needed
-    )
+    # Create simple vector retriever instead of using BM25
+    vector_retriever = index.as_retriever(similarity_top_k=5)
     
     return {
         "index": index,
         "retrievers": {
-            "bm25": bm25_retriever,
-            "auto_merging": auto_merging_retriever
+            "vector": vector_retriever,
+            "fallback": vector_retriever  # Using vector retriever twice in place of BM25
         }
     }
 

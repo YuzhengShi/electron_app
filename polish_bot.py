@@ -4,7 +4,6 @@ import os
 import pyperclip
 from llama_index.core import Settings
 from rag_processor import process_video
-from llama_index.core.retrievers import QueryFusionRetriever
 from llama_index.embeddings.openai import OpenAIEmbedding
 
 # Initialize OpenAI client
@@ -433,10 +432,6 @@ with tab2:
             selected_tone = selected_tone_with_emoji.split(" ")[-1].lower()
             response_text = st.session_state.analysis["responses"].get(selected_tone, "")
 
-            # Debug information - uncomment to see what keys are available
-            # st.write("Debug - Available keys:", list(st.session_state.analysis["responses"].keys()))
-            # st.write("Debug - Selected key:", selected_tone)
-
             finalized_response = st.text_area("Suggestion response:", value=response_text, height=150)
             
             if st.button("Copy Response"):
@@ -456,32 +451,24 @@ with tab3:
 
     if process_button:
         with st.spinner("Processing video..."):
-            result = process_video(video_url)
+            try:
+                result = process_video(video_url)
 
-            summary = generate_video_summary(result["transcript"])
-            
-            # Get pre-configured retrievers from the pipeline
-            bm25_retriever = result["retrievers"]["bm25"]
-            auto_merging_retriever = result["retrievers"]["auto_merging"]
-            
-            # Create fusion retriever
-            fusion_retriever = QueryFusionRetriever(
-                [bm25_retriever, auto_merging_retriever],
-                similarity_top_k=5,
-                num_queries=4,  # Generate 4 queries for each search
-                mode="reciprocal_rerank",  # Fusion method
-                use_async=True,
-                verbose=True,  # For debugging
-            )
-            
-            st.session_state.update({
-                "video_processed": True,
-                "transcript": result["transcript"],
-                "retriever": fusion_retriever,
-                "index": result["index"],
-                "video_summary": summary
-            })
-        st.success("✅ Video processed! Ask away!")
+                summary = generate_video_summary(result["transcript"])
+                
+                # Use the simplified retrievers
+                vector_retriever = result["retrievers"]["vector"]
+                
+                st.session_state.update({
+                    "video_processed": True,
+                    "transcript": result["transcript"],
+                    "retriever": vector_retriever,  # Use vector retriever directly
+                    "index": result["index"],
+                    "video_summary": summary
+                })
+                st.success("✅ Video processed! Ask away!")
+            except Exception as e:
+                st.error(f"Error processing video: {str(e)}")
 
     if st.session_state.video_processed:
         st.markdown("---")
@@ -545,5 +532,3 @@ with tab3:
                     st.markdown("---")
             else:
                 st.write("No conversation history yet.")
-    else:
-        st.info("👆 Enter an URL to start asking questions.")

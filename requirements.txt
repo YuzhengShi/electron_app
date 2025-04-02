@@ -1,0 +1,6 @@
+yt-dlp
+openai
+llama-index
+streamlit
+pyperclip
+ffmpeg-python 
